@@ -1,0 +1,60 @@
+volumes:
+  promdata:
+  grafdata:
+
+services:
+  # This service runs rtl_tcp and provides the data on port 1234.
+  rtl_tcp:
+    devices:
+      - /dev/bus/usb
+    build:
+      context: image/rtlsdr
+      dockerfile: Containerfile
+    entrypoint:
+      - rtl_tcp
+      - -a
+      - 0.0.0.0
+    healthcheck:
+      # We are healthy when rtl_tcp is listening on port 1234.
+      test: ["CMD", "grep", "-q", ":04D2", "/proc/net/tcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # Wraps rtlamr in a Python script. rtlamr reads data from
+  # rtl_tcp and writes it out in JSON format; the Python
+  # script parses this and produces Prometheus-compatible
+  # metrics.
+  meterreader:
+    depends_on:
+      rtl_tcp:
+        condition: service_healthy
+    build:
+      context: .
+      dockerfile: image/meterreader/Containerfile
+    environment:
+      METERREADER_RTL_SDR_ADDRESS: "rtl_tcp:1234"
+
+  # Scrapes metrics from meterreader service and stores
+  # them in time series database.
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.8.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - "promdata:/prometheus"
+      - "./config/prometheus:/config:z"
+    user: nobody
+    command:
+      - --config.file=/config/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=60d
+
+  # Dashboards and metrics exploration.
+  grafana:
+    image: docker.io/grafana/grafana:12.3
+    ports:
+      - "3000:3000"
+    volumes:
+      - "grafdata:/var/lib/grafana"

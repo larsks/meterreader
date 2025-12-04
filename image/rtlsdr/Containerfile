@@ -1,0 +1,7 @@
+FROM docker.io/debian:trixie
+
+RUN apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    rtl-sdr \
+    && \
+  apt-get clean
