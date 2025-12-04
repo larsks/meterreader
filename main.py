@@ -25,13 +25,19 @@ class MeterReader(Collector):
     lock: threading.Lock
     reader_thread: threading.Thread
     consumption: CounterMetricFamily
+    messages: Counter
 
     def __init__(self):
         self.samples = []
         self.lock = threading.Lock()
+
+        # Configure metrics
         self.consumption = CounterMetricFamily(
             "consumption", "Energy consumed", labels=["meterid", "metertype"]
         )
+        self.messages = Counter("messages", "Messages received from rtlamr")
+
+        # Start reader thread
         self.reader_thread = threading.Thread(target=self.reader)
         self.reader_thread.start()
 
@@ -57,7 +63,7 @@ class MeterReader(Collector):
                 LOG.warning("failed to validate: %s", line)
                 continue
 
-            MESSAGES.inc()
+            self.messages.inc()
             with self.lock:
                 self.samples.append(Sample.from_message(evt))
 
@@ -72,7 +78,6 @@ class MeterReader(Collector):
         yield self.consumption
 
 
-MESSAGES = Counter("rtlamr_messages", "Messages received from rtlamr")
 SETTINGS = Settings()
 REGISTRY.register(MeterReader())
 LOG = logging.getLogger("meterreader")
