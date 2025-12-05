@@ -34,7 +34,7 @@ services:
       context: .
       dockerfile: image/meterreader/Containerfile
     environment:
-      METERREADER_RTL_SDR_ADDRESS: "rtl_tcp:1234"
+      METERREADER_RTL_TCP_ADDRESS: "rtl_tcp:1234"
 
   # Scrapes metrics from meterreader service and stores
   # them in time series database.

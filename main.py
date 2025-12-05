@@ -1,4 +1,7 @@
+# pyright: reportUnusedCallResult=false
+
 import logging
+import argparse
 import pydantic
 import threading
 import subprocess
@@ -14,19 +17,26 @@ from prometheus_client.core import CounterMetricFamily
 from models import Reading
 
 
+class ArgsNamespace(argparse.Namespace):
+    verbose: int = 0
+    rtl_tcp_address: str = ""
+
+
 class Settings(BaseSettings):
     model_config: SettingsConfigDict = SettingsConfigDict(env_prefix="METERREADER_")
-    rtl_sdr_address: str = "127.0.0.1:1234"
+    rtl_tcp_address: str = "127.0.0.1:1234"
 
 
 class MeterReader(Collector):
+    rtl_tcp_address: str
     readings: dict[int, Reading]
     lock: threading.Lock
     reader_thread: threading.Thread
     metric_consumption: CounterMetricFamily
     metric_messages: Counter
 
-    def __init__(self):
+    def __init__(self, rtl_tcp_address: str | None = None):
+        self.rtl_tcp_address = rtl_tcp_address or SETTINGS.rtl_tcp_address
         self.readings = {}
         self.lock = threading.Lock()
 
@@ -41,12 +51,13 @@ class MeterReader(Collector):
         self.reader_thread.start()
 
     def reader(self):
+        LOG.info("using rtl_tcp service at %s", self.rtl_tcp_address)
         p = subprocess.Popen(
             [
                 "rtlamr",
                 "-msgtype=scm,scm+,idm,netidm",
                 "-format=json",
-                f"-server={SETTINGS.rtl_sdr_address}",
+                f"-server={self.rtl_tcp_address}",
             ],
             stdout=subprocess.PIPE,
         )
@@ -56,6 +67,7 @@ class MeterReader(Collector):
 
         line: bytes
         for line in p.stdout:
+            LOG.debug("message: %s", line)
             try:
                 reading = Reading.model_validate_json(line)
             except pydantic.ValidationError:
@@ -79,11 +91,24 @@ class MeterReader(Collector):
 
 
 SETTINGS = Settings()
-REGISTRY.register(MeterReader())
 LOG = logging.getLogger("meterreader")
 
 
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--verbose", "-v", action="count")
+    p.add_argument("--rtl-tcp-address", "-a", help="<address:port> for rtl_tcp service")
+    return p.parse_args(namespace=ArgsNamespace)
+
+
 def main():
+    args = parse_args()
+    loglevel = next(
+        (x for i, x in enumerate(["WARNING", "INFO", "DEBUG"]) if i == args.verbose),
+        "DEBUG",
+    )
+    logging.basicConfig(level=loglevel)
+    REGISTRY.register(MeterReader(rtl_tcp_address=args.rtl_tcp_address))
     _, t = start_http_server(9000)
     t.join()
 
