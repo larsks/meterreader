@@ -58,3 +58,5 @@ services:
       - "3000:3000"
     volumes:
       - "grafdata:/var/lib/grafana"
+      - "./config/grafana/provisioning:/etc/grafana/provisioning:z"
+      - "./config/grafana/dashboards:/etc/grafana/dashboards:z"
