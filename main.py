@@ -16,6 +16,7 @@ from monitor import Monitor
 class ArgsNamespace(argparse.Namespace):
     verbose: int = 0
     rtl_tcp_address: str = ""
+    rtlamr_path: str = ""
 
 
 class MeterReader(Collector, threading.Thread):
@@ -60,6 +61,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--verbose", "-v", action="count")
     p.add_argument("--rtl-tcp-address", "-a", help="<address:port> for rtl_tcp service")
+    p.add_argument("--rtlamr-path", "-p", help="Path to rtlamr binary")
     return p.parse_args(namespace=ArgsNamespace)
 
 
@@ -71,7 +73,9 @@ def main():
     )
     logging.basicConfig(level=loglevel)
 
-    monitor = Monitor(rtl_tcp_address=args.rtl_tcp_address)
+    monitor = Monitor(
+        rtl_tcp_address=args.rtl_tcp_address, rtlamr_path=args.rtlamr_path
+    )
     reader = MeterReader(monitor=monitor)
     reader.start()
     REGISTRY.register(reader)
