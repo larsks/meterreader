@@ -1,18 +1,17 @@
 import logging
-import threading
 import pydantic
+import threading
 import subprocess
 from typing import override
+from prometheus_client import Counter
+from pydantic_settings import BaseSettings
 from prometheus_client.core import REGISTRY
 from prometheus_client import start_http_server
 from prometheus_client.registry import Collector
-from prometheus_client.core import CounterMetricFamily
-from prometheus_client import Counter
-from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
+from prometheus_client.core import CounterMetricFamily
 
-from models import Event
-from models import Sample
+from models import Reading
 
 
 class Settings(BaseSettings):
@@ -21,21 +20,21 @@ class Settings(BaseSettings):
 
 
 class MeterReader(Collector):
-    samples: list[Sample]
+    readings: dict[int, Reading]
     lock: threading.Lock
     reader_thread: threading.Thread
-    consumption: CounterMetricFamily
-    messages: Counter
+    metric_consumption: CounterMetricFamily
+    metric_messages: Counter
 
     def __init__(self):
-        self.samples = []
+        self.readings = {}
         self.lock = threading.Lock()
 
         # Configure metrics
-        self.consumption = CounterMetricFamily(
+        self.metric_consumption = CounterMetricFamily(
             "consumption", "Energy consumed", labels=["meterid", "metertype"]
         )
-        self.messages = Counter("messages", "Messages received from rtlamr")
+        self.metric_messages = Counter("messages", "Messages received from rtlamr")
 
         # Start reader thread
         self.reader_thread = threading.Thread(target=self.reader)
@@ -58,24 +57,25 @@ class MeterReader(Collector):
         line: bytes
         for line in p.stdout:
             try:
-                evt = Event.model_validate_json(line)
+                reading = Reading.model_validate_json(line)
             except pydantic.ValidationError:
                 LOG.warning("failed to validate: %s", line)
                 continue
 
-            self.messages.inc()
+            self.metric_messages.inc()
             with self.lock:
-                self.samples.append(Sample.from_message(evt))
+                self.readings[reading.Message.ID] = reading
 
     @override
     def collect(self):
         with self.lock:
-            for sample in self.samples:
-                self.consumption.add_metric(
-                    [str(sample.ID), str(sample.Type)], sample.Consumption
+            for reading in self.readings.values():
+                self.metric_consumption.add_metric(
+                    [str(reading.Message.ID), str(reading.Message.Type)],
+                    reading.Message.Consumption,
                 )
 
-        yield self.consumption
+        yield self.metric_consumption
 
 
 SETTINGS = Settings()

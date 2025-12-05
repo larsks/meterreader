@@ -10,21 +10,7 @@ class SCMMessage(BaseModel):
     Consumption: int
 
 
-class Event(BaseModel):
+class Reading(BaseModel):
     Time: str
     Offset: int
     Message: SCMMessage
-
-
-class Sample(BaseModel):
-    ID: int
-    Type: int
-    Consumption: int
-
-    @classmethod
-    def from_message(cls, msg: Event):
-        return cls(
-            ID=msg.Message.ID,
-            Type=msg.Message.Type,
-            Consumption=msg.Message.Consumption,
-        )
