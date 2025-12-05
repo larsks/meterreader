@@ -1,5 +1,8 @@
+# pyright: reportUnusedCallResult=false
+
 from datetime import datetime
 
+import pydantic
 import pytest
 
 import models
@@ -34,9 +37,30 @@ import models
             ),
             id="valid scm+ message",
         ),
+        pytest.param(
+            '{"Time":"","Offset":0,"Length":229376,"Type":"SCM+","Message":{"FrameSync":5795,"ProtocolID":30,"EndpointType":156,"EndpointID":78043469,"Consumption":406934,"Tamper":1280,"PacketCRC":44066}}',
+            False,
+            None,
+            id="invalid date",
+        ),
+        pytest.param(
+            '{"Time":"2025-12-05T16:45:31.269518166Z","Offset":0,"Length":229376,"Type":"INVALID","Message":{"FrameSync":5795,"ProtocolID":30,"EndpointType":156,"EndpointID":78043469,"Consumption":406934,"Tamper":1280,"PacketCRC":44066}}',
+            False,
+            None,
+            id="invalid message type",
+        ),
+        pytest.param(
+            '{"Time":"2025-12-05T16:45:31.269518166Z","Offset":0,"Length":229376,"Type":"SCM","Message":{"FrameSync":5795,"ProtocolID":30,"EndpointType":156,"EndpointID":78043469,"Tamper":1280,"PacketCRC":44066}}',
+            False,
+            None,
+            id="missing consumption value",
+        ),
     ],
 )
 def test_parse_messages(message: str, valid: bool, expected: models.Reading):
-    result = models.Reading.model_validate_json(message)
     if valid:
+        result = models.Reading.model_validate_json(message)
         assert result == expected
+    else:
+        with pytest.raises(pydantic.ValidationError):
+            models.Reading.model_validate_json(message)
