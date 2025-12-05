@@ -1,8 +1,7 @@
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-
+from datetime import datetime
 from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # This handles both SCM and SCM+ messages through the magic
@@ -21,7 +20,15 @@ class MessageType(StrEnum):
 
 
 class Reading(BaseModel):
-    Time: str
+    Time: datetime
     Offset: int
     Type: MessageType = MessageType.UNKNOWN
     Message: SCMMessage
+
+    @classmethod
+    @field_validator("Time", mode="before")
+    def parse_time(cls, v: str | datetime):
+        if isinstance(v, str):
+            v = datetime.fromisoformat(v)
+
+        return v
