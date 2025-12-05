@@ -32,7 +32,6 @@ class MeterReader(Collector):
     readings: dict[int, Reading]
     lock: threading.Lock
     reader_thread: threading.Thread
-    metric_consumption: CounterMetricFamily
     metric_messages: Counter
 
     def __init__(self, rtl_tcp_address: str | None = None):
@@ -40,10 +39,6 @@ class MeterReader(Collector):
         self.readings = {}
         self.lock = threading.Lock()
 
-        # Configure metrics
-        self.metric_consumption = CounterMetricFamily(
-            "consumption", "Energy consumed", labels=["meterid", "metertype"]
-        )
         self.metric_messages = Counter("messages", "Messages received from rtlamr")
 
         # Start reader thread
@@ -80,14 +75,17 @@ class MeterReader(Collector):
 
     @override
     def collect(self):
+        metric_consumption = CounterMetricFamily(
+            "consumption", "Energy consumed", labels=["meterid", "metertype"]
+        )
         with self.lock:
             for reading in self.readings.values():
-                self.metric_consumption.add_metric(
+                metric_consumption.add_metric(
                     [str(reading.Message.ID), str(reading.Message.Type)],
                     reading.Message.Consumption,
                 )
 
-        yield self.metric_consumption
+        yield metric_consumption
 
 
 SETTINGS = Settings()
