@@ -32,14 +32,20 @@ class MeterReader(Collector):
     readings: dict[int, Reading]
     lock: threading.Lock
     reader_thread: threading.Thread
-    metric_messages: Counter
+    metric_valid_reading_count: Counter
+    metric_invalid_reading_count: Counter
 
     def __init__(self, rtl_tcp_address: str | None = None):
         self.rtl_tcp_address = rtl_tcp_address or SETTINGS.rtl_tcp_address
         self.readings = {}
         self.lock = threading.Lock()
 
-        self.metric_messages = Counter("messages", "Messages received from rtlamr")
+        self.metric_invalid_reading_count = Counter(
+            "rtlamr_invalid_reading_count", "Invalid messages received from rtlamr"
+        )
+        self.metric_valid_reading_count = Counter(
+            "rtlamr_valid_reading_count", "Valid messages received from rtlamr"
+        )
 
         # Start reader thread
         self.reader_thread = threading.Thread(target=self.reader)
@@ -66,10 +72,11 @@ class MeterReader(Collector):
             try:
                 reading = Reading.model_validate_json(line)
             except pydantic.ValidationError:
+                self.metric_invalid_reading_count.inc()
                 LOG.warning("failed to validate: %s", line)
                 continue
 
-            self.metric_messages.inc()
+            self.metric_valid_reading_count.inc()
             with self.lock:
                 self.readings[reading.Message.ID] = reading
 
