@@ -21,6 +21,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    restart: unless-stopped
 
   # Wraps rtlamr in a Python script. rtlamr reads data from
   # rtl_tcp and writes it out in JSON format; the Python
@@ -35,6 +36,7 @@ services:
       dockerfile: image/meterreader/Containerfile
     environment:
       METERREADER_RTL_TCP_ADDRESS: "rtl_tcp:1234"
+    restart: unless-stopped
 
   # Scrapes metrics from meterreader service and stores
   # them in time series database.
@@ -50,6 +52,7 @@ services:
       - --config.file=/config/prometheus.yaml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=60d
+    restart: unless-stopped
 
   # Dashboards and metrics exploration.
   grafana:
@@ -60,3 +63,4 @@ services:
       - "grafdata:/var/lib/grafana"
       - "./config/grafana/provisioning:/etc/grafana/provisioning:z"
       - "./config/grafana/dashboards:/etc/grafana/dashboards:z"
+    restart: unless-stopped
