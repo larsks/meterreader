@@ -1,7 +1,7 @@
 import logging
 import subprocess
 import threading
-from queue import Queue
+from queue import Queue, ShutDown
 from typing import override
 
 import pydantic
@@ -24,7 +24,7 @@ INVALID_READINGS = Counter(
 VALID_READINGS = Counter(
     "rtlamr_valid_reading_count", "Valid readings received from rtlamr"
 )
-LOG = logging.getLogger("__name__")
+LOG = logging.getLogger(__name__)
 
 
 class Monitor(threading.Thread):
@@ -34,7 +34,7 @@ class Monitor(threading.Thread):
 
     rtl_tcp_address: str
     rtlamr_path: str
-    readings: Queue[models.Reading]
+    readings: Queue[models.Reading] | None
 
     def __init__(
         self, rtl_tcp_address: str | None = None, rtlamr_path: str | None = None
@@ -43,32 +43,37 @@ class Monitor(threading.Thread):
 
         self.rtl_tcp_address = rtl_tcp_address or SETTINGS.rtl_tcp_address
         self.rtlamr_path = rtlamr_path or SETTINGS.rtlamr_path
-        self.readings = Queue()
+        self.readings = None
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        reading = self.readings.get(block=True)
-        return reading
+        try:
+            reading = self.readings.get(block=True)
+            return reading
+        except ShutDown:
+            raise StopIteration()
 
     @override
     def run(self):
+        self.readings = Queue()
         LOG.info("start reading from rtl_tcp @ %s", self.rtl_tcp_address)
-        p = subprocess.Popen(
-            [
-                self.rtlamr_path,
-                "-msgtype=scm,scm+",
-                "-format=json",
-                f"-server={self.rtl_tcp_address}",
-            ],
-            stdout=subprocess.PIPE,
-        )
-
-        if p.stdout is None:
-            return
 
         try:
+            p = subprocess.Popen(
+                [
+                    self.rtlamr_path,
+                    "-msgtype=scm,scm+",
+                    "-format=json",
+                    f"-server={self.rtl_tcp_address}",
+                ],
+                stdout=subprocess.PIPE,
+            )
+
+            if p.stdout is None:
+                return
+
             line: bytes
             for line in p.stdout:
                 try:

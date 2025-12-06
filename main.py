@@ -39,6 +39,8 @@ class MeterReader(Collector, threading.Thread):
             with self.lock:
                 self.readings[reading.Message.ID] = reading
 
+        LOG.warning("monitor has stopped")
+
     @override
     def collect(self):
         metric_consumption = CounterMetricFamily(
@@ -54,7 +56,7 @@ class MeterReader(Collector, threading.Thread):
         yield metric_consumption
 
 
-LOG = logging.getLogger("__name__")
+LOG = logging.getLogger(__name__)
 
 
 def parse_args():
@@ -63,6 +65,14 @@ def parse_args():
     p.add_argument("--rtl-tcp-address", "-a", help="<address:port> for rtl_tcp service")
     p.add_argument("--rtlamr-path", "-p", help="Path to rtlamr binary")
     return p.parse_args(namespace=ArgsNamespace)
+
+
+def wait_for_first_complete(*threads: threading.Thread):
+    while True:
+        for t in threads:
+            t.join(timeout=0.5)
+            if not t.is_alive():
+                return
 
 
 def main():
@@ -81,9 +91,19 @@ def main():
     REGISTRY.register(reader)
 
     LOG.info("starting metrics server")
-    _, t = start_http_server(9000)
-    t.join()
+    server, server_thread = start_http_server(9000)
+
+    try:
+        wait_for_first_complete(reader, server_thread)
+    finally:
+        if server_thread.is_alive():
+            LOG.warning("shutting down http service")
+            server.shutdown()
+            server_thread.join()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
